@@ -22,10 +22,10 @@ app.get('/', (req, res) => {
   res.send('Hello World!');
 })
 
-app.get('/test-db', (req, res, next) => {
+app.get('/test-db', (req, res) => {
   pool.query('SELECT NOW()', (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     res.send(results.rows)
   })
@@ -36,7 +36,7 @@ app.post('/register', (req, res) => {
 
   pool.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email], (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     if (results.rows.length > 0) {
       return res.status(409).send('User already exists');
@@ -44,7 +44,7 @@ app.post('/register', (req, res) => {
 
     bcrypt.hash(password, 10, (err, hashedPassword) => {
       if (err) {
-        throw err;
+        return res.status(500).send(err.message);
       }
 
       pool.query(
@@ -52,7 +52,7 @@ app.post('/register', (req, res) => {
         [username, email, hashedPassword],
         (error, results) => {
           if (error) {
-            throw error;
+            return res.status(500).send(error.message);
           }
           res.status(201).json(results.rows[0]);
         }
@@ -60,7 +60,6 @@ app.post('/register', (req, res) => {
     });
   });
 })
-
 
 app.post('/login', passport.authenticate('local'), (req, res) => {
   res.status(200).json({ message: 'Login successful', user: req.user });
@@ -72,14 +71,14 @@ app.get('/products', (req, res) => {
   if (category) {
     pool.query('SELECT * FROM products WHERE category = $1', [category], (error, results) => {
       if (error) {
-        throw error;
+        return res.status(500).send(error.message);
       }
       res.status(200).json(results.rows);
     });
   } else {
     pool.query('SELECT * FROM products', (error, results) => {
       if (error) {
-        throw error;
+        return res.status(500).send(error.message);
       }
       res.status(200).json(results.rows);
     });
@@ -94,7 +93,7 @@ app.post('/products', (req, res) => {
     [name, description, price, stock_quantity, category],
     (error, results) => {
       if (error) {
-        throw error;
+        return res.status(500).send(error.message);
       }
       res.status(201).json(results.rows[0]);
     }
@@ -106,7 +105,7 @@ app.get('/products/:id', (req, res) => {
 
   pool.query('SELECT * FROM products WHERE id = $1', [id], (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     if (results.rows.length === 0) {
       return res.status(404).send('Product not found');
@@ -124,7 +123,7 @@ app.put('/products/:id', (req, res) => {
     [name, description, price, stock_quantity, category, id],
     (error, results) => {
       if (error) {
-        throw error;
+        return res.status(500).send(error.message);
       }
       if (results.rows.length === 0) {
         return res.status(404).send('Product not found');
@@ -139,7 +138,7 @@ app.delete('/products/:id', (req, res) => {
 
   pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [id], (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     if (results.rows.length === 0) {
       return res.status(404).send('Product not found');
@@ -151,7 +150,7 @@ app.delete('/products/:id', (req, res) => {
 app.get('/users', (req, res) => {
   pool.query('SELECT id, username, email, created_at FROM users', (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     res.status(200).json(results.rows);
   });
@@ -162,7 +161,7 @@ app.get('/users/:id', (req, res) => {
 
   pool.query('SELECT id, username, email, created_at FROM users WHERE id = $1', [id], (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     if (results.rows.length === 0) {
       return res.status(404).send('User not found');
@@ -180,7 +179,7 @@ app.put('/users/:id', (req, res) => {
     [username, email, id],
     (error, results) => {
       if (error) {
-        throw error;
+        return res.status(500).send(error.message);
       }
       if (results.rows.length === 0) {
         return res.status(404).send('User not found');
@@ -195,13 +194,71 @@ app.delete('/users/:id', (req, res) => {
 
   pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id], (error, results) => {
     if (error) {
-      throw error;
+      return res.status(500).send(error.message);
     }
     if (results.rows.length === 0) {
       return res.status(404).send('User not found');
     }
     res.status(200).send('User deleted successfully');
   });
+})
+
+app.post('/cart', (req, res) => {
+  const { user_id } = req.body;
+
+  pool.query(
+    'INSERT INTO carts (user_id) VALUES ($1) RETURNING *',
+    [user_id],
+    (error, results) => {
+      if (error) {
+        if (error.code === '23505') {
+          return res.status(409).send('User already has a cart');
+        }
+        if (error.code === '23503') {
+          return res.status(400).send('User does not exist');
+        }
+        return res.status(500).send(error.message);
+      }
+      res.status(201).json(results.rows[0]);
+    }
+  );
+})
+
+app.get('/cart/:cartId', (req, res) => {
+  const { cartId } = req.params;
+
+  pool.query(
+    `SELECT cart_items.id, cart_items.quantity, products.name, products.price, products.id AS product_id
+     FROM cart_items
+     JOIN products ON cart_items.product_id = products.id
+     WHERE cart_items.cart_id = $1`,
+    [cartId],
+    (error, results) => {
+      if (error) {
+        return res.status(500).send(error.message);
+      }
+      res.status(200).json(results.rows);
+    }
+  );
+})
+
+app.post('/cart/:cartId', (req, res) => {
+  const { cartId } = req.params;
+  const { product_id, quantity } = req.body;
+
+  pool.query(
+    'INSERT INTO cart_items (cart_id, product_id, quantity) VALUES ($1, $2, $3) RETURNING *',
+    [cartId, product_id, quantity],
+    (error, results) => {
+      if (error) {
+        if (error.code === '23503') {
+          return res.status(400).send('Cart or product does not exist');
+        }
+        return res.status(500).send(error.message);
+      }
+      res.status(201).json(results.rows[0]);
+    }
+  );
 })
 
 app.listen(3000, () => {
