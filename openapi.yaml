@@ -1,0 +1,375 @@
+openapi: 3.0.1
+info:
+  title: E-commerce API
+  version: 1.0.0
+  description: A REST API for an e-commerce application built with Express and PostgreSQL.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /register:
+    post:
+      summary: Register a new user
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - email
+                - password
+      responses:
+        '201':
+          description: User created successfully
+        '409':
+          description: User already exists
+
+  /login:
+    post:
+      summary: Log in with username and password
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /products:
+    get:
+      summary: Get all products, optionally filtered by category
+      tags:
+        - Products
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of products
+    post:
+      summary: Create a new product
+      tags:
+        - Products
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '201':
+          description: Product created successfully
+
+  /products/{id}:
+    get:
+      summary: Get a single product by id
+      tags:
+        - Products
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The requested product
+        '404':
+          description: Product not found
+    put:
+      summary: Update a product by id
+      tags:
+        - Products
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '200':
+          description: Product updated successfully
+        '404':
+          description: Product not found
+    delete:
+      summary: Delete a product by id
+      tags:
+        - Products
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Product deleted successfully
+        '404':
+          description: Product not found
+
+  /users:
+    get:
+      summary: Get all users
+      tags:
+        - Users
+      responses:
+        '200':
+          description: A list of users
+
+  /users/{id}:
+    get:
+      summary: Get a single user by id
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The requested user
+        '404':
+          description: User not found
+    put:
+      summary: Update a user by id
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: User updated successfully
+        '404':
+          description: User not found
+    delete:
+      summary: Delete a user by id
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User deleted successfully
+        '404':
+          description: User not found
+
+  /cart:
+    post:
+      summary: Create a cart for a user
+      tags:
+        - Cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+      responses:
+        '201':
+          description: Cart created successfully
+        '409':
+          description: User already has a cart
+
+  /cart/{cartId}:
+    get:
+      summary: Get all items in a cart
+      tags:
+        - Cart
+      parameters:
+        - name: cartId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A list of cart items
+    post:
+      summary: Add an item to a cart
+      tags:
+        - Cart
+      parameters:
+        - name: cartId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id:
+                  type: integer
+                quantity:
+                  type: integer
+      responses:
+        '201':
+          description: Item added to cart
+
+  /cart/{cartId}/items/{itemId}:
+    delete:
+      summary: Remove an item from a cart
+      tags:
+        - Cart
+      parameters:
+        - name: cartId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item removed from cart successfully
+        '404':
+          description: Cart item not found
+
+  /cart/{cartId}/checkout:
+    post:
+      summary: Checkout a cart and create an order
+      tags:
+        - Cart
+      parameters:
+        - name: cartId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                payment_details:
+                  type: object
+                  properties:
+                    cardNumber:
+                      type: string
+      responses:
+        '201':
+          description: Order created successfully
+        '400':
+          description: Cart is empty or does not exist
+        '402':
+          description: Payment failed
+
+  /orders:
+    get:
+      summary: Get all orders for a user
+      tags:
+        - Orders
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A list of orders
+
+  /orders/{orderId}:
+    get:
+      summary: Get the details of a specific order
+      tags:
+        - Orders
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The order items with product details
+
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        stock_quantity:
+          type: integer
+        category:
+          type: string
+      required:
+        - name
+        - price
+        - stock_quantity

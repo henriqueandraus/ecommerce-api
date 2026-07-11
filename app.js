@@ -3,6 +3,9 @@ const pool = require('./db.js')
 const bcrypt = require('bcrypt')
 const session = require('express-session')
 const passport = require('./passportConfig')
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+const swaggerDocument = YAML.load('./openapi.yaml');
 require('dotenv').config();
 
 function processPayment(paymentDetails) {
@@ -15,6 +18,7 @@ function processPayment(paymentDetails) {
 const app = express()
 
 app.use(express.json());
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.use(session({
   secret: process.env.SESSION_SECRET,
@@ -264,6 +268,24 @@ app.post('/cart/:cartId', (req, res) => {
         return res.status(500).send(error.message);
       }
       res.status(201).json(results.rows[0]);
+    }
+  );
+})
+
+app.delete('/cart/:cartId/items/:itemId', (req, res) => {
+  const { cartId, itemId } = req.params;
+
+  pool.query(
+    'DELETE FROM cart_items WHERE id = $1 AND cart_id = $2 RETURNING *',
+    [itemId, cartId],
+    (error, results) => {
+      if (error) {
+        return res.status(500).send(error.message);
+      }
+      if (results.rows.length === 0) {
+        return res.status(404).send('Cart item not found');
+      }
+      res.status(200).send('Item removed from cart successfully');
     }
   );
 })
