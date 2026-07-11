@@ -261,6 +261,92 @@ app.post('/cart/:cartId', (req, res) => {
   );
 })
 
+app.post('/orders', (req, res) => {
+  const { user_id, cart_id } = req.body;
+
+  pool.query(
+    `SELECT cart_items.product_id, cart_items.quantity, products.price
+     FROM cart_items
+     JOIN products ON cart_items.product_id = products.id
+     WHERE cart_items.cart_id = $1`,
+    [cart_id],
+    (error, cartResults) => {
+      if (error) {
+        return res.status(500).send(error.message);
+      }
+      if (cartResults.rows.length === 0) {
+        return res.status(400).send('Cart is empty');
+      }
+
+      const totalAmount = cartResults.rows.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      pool.query(
+        'INSERT INTO orders (user_id, status, total_amount) VALUES ($1, $2, $3) RETURNING *',
+        [user_id, 'pending', totalAmount],
+        (error, orderResults) => {
+          if (error) {
+            return res.status(500).send(error.message);
+          }
+
+          const order = orderResults.rows[0];
+
+          const insertPromises = cartResults.rows.map((item) => {
+            return pool.query(
+              'INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase) VALUES ($1, $2, $3, $4)',
+              [order.id, item.product_id, item.quantity, item.price]
+            );
+          });
+
+          Promise.all(insertPromises)
+            .then(() => {
+              pool.query('DELETE FROM cart_items WHERE cart_id = $1', [cart_id], (error) => {
+                if (error) {
+                  return res.status(500).send(error.message);
+                }
+                res.status(201).json(order);
+              });
+            })
+            .catch((error) => {
+              res.status(500).send(error.message);
+            });
+        }
+      );
+    }
+  );
+})
+
+app.get('/orders', (req, res) => {
+  const { user_id } = req.query;
+
+  pool.query('SELECT * FROM orders WHERE user_id = $1', [user_id], (error, results) => {
+    if (error) {
+      return res.status(500).send(error.message);
+    }
+    res.status(200).json(results.rows);
+  });
+})
+
+app.get('/orders/:orderId', (req, res) => {
+  const { orderId } = req.params;
+
+  pool.query(
+    `SELECT order_items.id, order_items.quantity, order_items.price_at_purchase, products.name
+     FROM order_items
+     JOIN products ON order_items.product_id = products.id
+     WHERE order_items.order_id = $1`,
+    [orderId],
+    (error, results) => {
+      if (error) {
+        return res.status(500).send(error.message);
+      }
+      res.status(200).json(results.rows);
+    }
+  );
+})
+
 app.listen(3000, () => {
   console.log('Server is running on port 3000');
 });
