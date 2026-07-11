@@ -5,6 +5,13 @@ const session = require('express-session')
 const passport = require('./passportConfig')
 require('dotenv').config();
 
+function processPayment(paymentDetails) {
+  if (!paymentDetails || !paymentDetails.cardNumber) {
+    return false;
+  }
+  return true;
+}
+
 const app = express()
 
 app.use(express.json());
@@ -261,21 +268,28 @@ app.post('/cart/:cartId', (req, res) => {
   );
 })
 
-app.post('/orders', (req, res) => {
-  const { user_id, cart_id } = req.body;
+app.post('/cart/:cartId/checkout', (req, res) => {
+  const { cartId } = req.params;
+  const { user_id, payment_details } = req.body;
 
   pool.query(
     `SELECT cart_items.product_id, cart_items.quantity, products.price
      FROM cart_items
      JOIN products ON cart_items.product_id = products.id
      WHERE cart_items.cart_id = $1`,
-    [cart_id],
+    [cartId],
     (error, cartResults) => {
       if (error) {
         return res.status(500).send(error.message);
       }
       if (cartResults.rows.length === 0) {
-        return res.status(400).send('Cart is empty');
+        return res.status(400).send('Cart is empty or does not exist');
+      }
+
+      const paymentSuccess = processPayment(payment_details);
+
+      if (!paymentSuccess) {
+        return res.status(402).send('Payment failed');
       }
 
       const totalAmount = cartResults.rows.reduce(
@@ -285,7 +299,7 @@ app.post('/orders', (req, res) => {
 
       pool.query(
         'INSERT INTO orders (user_id, status, total_amount) VALUES ($1, $2, $3) RETURNING *',
-        [user_id, 'pending', totalAmount],
+        [user_id, 'paid', totalAmount],
         (error, orderResults) => {
           if (error) {
             return res.status(500).send(error.message);
@@ -302,7 +316,7 @@ app.post('/orders', (req, res) => {
 
           Promise.all(insertPromises)
             .then(() => {
-              pool.query('DELETE FROM cart_items WHERE cart_id = $1', [cart_id], (error) => {
+              pool.query('DELETE FROM cart_items WHERE cart_id = $1', [cartId], (error) => {
                 if (error) {
                   return res.status(500).send(error.message);
                 }
