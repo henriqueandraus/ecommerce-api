@@ -148,6 +148,62 @@ app.delete('/products/:id', (req, res) => {
   });
 })
 
+app.get('/users', (req, res) => {
+  pool.query('SELECT id, username, email, created_at FROM users', (error, results) => {
+    if (error) {
+      throw error;
+    }
+    res.status(200).json(results.rows);
+  });
+})
+
+app.get('/users/:id', (req, res) => {
+  const { id } = req.params;
+
+  pool.query('SELECT id, username, email, created_at FROM users WHERE id = $1', [id], (error, results) => {
+    if (error) {
+      throw error;
+    }
+    if (results.rows.length === 0) {
+      return res.status(404).send('User not found');
+    }
+    res.status(200).json(results.rows[0]);
+  });
+})
+
+app.put('/users/:id', (req, res) => {
+  const { id } = req.params;
+  const { username, email } = req.body;
+
+  pool.query(
+    'UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, created_at',
+    [username, email, id],
+    (error, results) => {
+      if (error) {
+        throw error;
+      }
+      if (results.rows.length === 0) {
+        return res.status(404).send('User not found');
+      }
+      res.status(200).json(results.rows[0]);
+    }
+  );
+})
+
+app.delete('/users/:id', (req, res) => {
+  const { id } = req.params;
+
+  pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id], (error, results) => {
+    if (error) {
+      throw error;
+    }
+    if (results.rows.length === 0) {
+      return res.status(404).send('User not found');
+    }
+    res.status(200).send('User deleted successfully');
+  });
+})
+
 app.listen(3000, () => {
   console.log('Server is running on port 3000');
 });
